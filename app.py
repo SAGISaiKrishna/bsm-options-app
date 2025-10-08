@@ -94,8 +94,10 @@ def fetch_option_chain_ind(symbol: str):
         if rec.get("expiryDate") != expiry:
             continue
         ce = rec.get("CE")
+        if not ce:
+            continue
         iv = ce.get("impliedVolatility")  # Typically already in % (e.g., 18.42)
-        if not ce or iv is None:
+        if iv is None:
             continue
 
         strike = rec.get("strikePrice")
