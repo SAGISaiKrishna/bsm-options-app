@@ -85,6 +85,7 @@ def fetch_option_chain_ind(symbol: str):
     if not expiry_list:
         raise RuntimeError("No expiry dates found in NSE response.")
     expiry = expiry_list[0]  # nearest expiry
+    print("Using expiry:", expiry)
 
     # ------------ Extract CALL strikes and IVs for that expiry ------------
     records = payload.get("records", {}).get("data", [])
@@ -126,12 +127,17 @@ st.caption("European options • pricing, Greeks, implied volatility, and standa
 # ---------------------------
 # Sidebar: Inputs
 # ---------------------------
+
 with st.sidebar:
 
-    tkr = "HAL"
-    st.header(f"Inputs ({tkr})")
-
     
+    st.header(f"Inputs")
+    tkr = "HAL"
+    tkr = st.text_input("Ticker", value=tkr, help="Enter a valid NSE equity ticker symbol (e.g., HAL, RELIANCE).")
+    tkr = tkr.strip().upper()  # Normalize input
+    r = st.number_input("Risk-free r (%)", min_value=0.0, value=10.0, step=0.25) / 100.0
+    st.text("Parameters below are populated from the option chain for the ticker by default. You can change them if needed.")
+
     calls = fetch_option_chain_ind(tkr)
     # use mid price where possible
     valid = (calls["bid"] > 0) & (calls["ask"] > 0)
@@ -139,16 +145,15 @@ with st.sidebar:
     calls.loc[~valid, "mid"] = calls.loc[~valid, "lastPrice"]
 
     T = float(calls.iloc[0]["T"])  # use the first row's T as the default T(assumes all calls have same T)
-    spotPrice = calls.iloc[0]["UnderlyingPrice"]  # use the first row's UnderlyingPrice for the default S
+    spotPrice = float(calls.iloc[0]["UnderlyingPrice"])  # use the first row's UnderlyingPrice for the default S
 
-    S = st.number_input("Spot S", min_value=0.01, value=float(spotPrice), step=1.0)
+    S = st.number_input("Spot S", min_value=0.01, value=spotPrice, step=1.0)
     q = st.number_input("Dividend yield q (%)", min_value=0.0, value=0.0, step=0.1) / 100.0
 
     # Core contract parameters
     K = st.number_input("Strike K", min_value=0.01, value=float(round(S, 0)), step=1.0)
     days = st.number_input("Days to expiry", min_value=1, value=int(T*365.0), step=1)
     T = days / 365.0  # convert to years 
-    r = st.number_input("Risk-free r (%)", min_value=0.0, value=10.0, step=0.25) / 100.0
     kind = st.selectbox("Option type", options=["call", "put"], index=0)
 
     # Volatility or IV from price
@@ -166,15 +171,17 @@ with st.sidebar:
 
 run = st.button("Compute")
 
+if 'computed' not in st.session_state:
+    st.session_state['computed'] = False
 
-    
-    
-
-
-# ---------------------------
-# Compute & Display
-# ---------------------------
 if run:
+    st.session_state['computed'] = True
+
+if st.session_state['computed']:
+    # show your tabs and sliders here
+    # ---------------------------
+    # Compute & Display
+    # ---------------------------
     try:
         # If user chose IV from price, solve for sigma first
         if sigma is None and target_px is not None:
@@ -272,22 +279,20 @@ if run:
 
         # --- Tab 5: Inputs Echo (for reproducibility) ---
         with tab5:
-            echo = pd.DataFrame(
-                [
-                    ("S", S), 
-                    ("K", K), 
-                    ("T (years)", T), 
-                    ("Days to expiry", days),
-                    ("r (annual)", r), 
-                    ("q (annual)", q), 
-                    ("σ (annual)", sigma), 
-                    ("Type", kind)
-                ],
-                columns=["key", "value"],
+            st.write(
+                pd.Series(
+                    {
+                        "S": S,
+                        "K": K,
+                        "T (years)": T,
+                        "Days to expiry": days,
+                        "r (annual)": r,
+                        "q (annual)": q,
+                        "σ (annual)": sigma,
+                        "Type": kind,
+                    }
+                )
             )
-            echo["value"] = echo["value"].astype(str)  # prevent Arrow from forcing numeric
-            st.dataframe(echo, use_container_width=True)
-
 
         # --- Tab 6: Smile Plot (if AAPL prefilled) ---
         with tab6: 
